@@ -1,0 +1,121 @@
+#! /usr/bin/env bash
+set -euo pipefail
+
+function print_branches() { ( set -euo pipefail
+  num_branches="${#branches[@]}"
+  for i in $(seq 0 $((num_branches-1))); do
+    echo "$((i+1))) ${branches[i]}"
+  done
+)}
+
+function check_linked() { ( set -euo pipefail
+  echo "Checking linkages..."
+  num_branches="${#branches[@]}"
+  for i in $(seq 0 $((num_branches-1))); do
+    if [[ "${i}" == 0 ]]; then
+      expected_upstream_branch="origin/master"
+    else
+      expected_upstream_branch="origin/${branches[i-1]}"
+    fi
+    actual_upstream_branch=$(git rev-parse --abbrev-ref '@{upstream}')
+    if [[ "${actual_upstream_branch}" != "${expected_upstream_branch}" ]]; then
+       echo "upstream for ${branches[i]} is wrong"
+       echo "expected '${expected_upstream_branch}', but was '${actual_upstream_branch}'"
+      return 1
+    fi
+  done
+  echo "Looks good ✅"
+)}
+
+function border() { ( set -euo pipefail
+  local screen_width
+  screen_width=$(tput cols)
+  printf '=%.0s' $(seq 1 "${screen_width}")
+)}
+
+
+function openpr() {
+  local ref="${1}"
+  [ -z "${ref}" ] && ref=$(git branch --show-current)
+  gh pr view "${ref}" --web
+}
+
+function submit_pr() {
+  local ref="${1}"
+  [ -z "${ref}" ] && ref=$(git branch --show-current)
+  gh pr ready "${ref}"
+}
+
+function open_prs_in_browser() { ( set -euo pipefail
+  for branch in "${branches[@]}"; do
+    openpr "${branch}"
+  done
+)}
+
+function submit_all_prs() { ( set -euo pipefail
+  for branch in "${branches[@]}"; do
+    submit_pr "${branch}"
+  done
+)}
+
+function get_commit_yaml() { ( set -euo pipefail
+
+  function dothething() { ( set -euo pipefail
+    subject=$(git log --format='%s' -n 1 "${sha}")
+    echo "- title: ${subject}"
+    echo "  commits:"
+    echo "    - ${sha} # (${subject})"
+  )}
+
+  while read -r sha; do
+      dothething
+  done
+  dothething
+)}
+  
+function generate_create_plan() { ( set -euo pipefail
+  dst="pr-stack-plan.jsonnet"
+  git log '@{upstream}..HEAD' --pretty=format:"%H" | get_commit_yaml | yq eval -o json | jq '.[]' --slurp | jsonnetfmt - > "${dst}"
+  echo "Created ${dst}"
+  echo "edit if you want, and then run: prstack create pr-stack-plan.jsonnet"
+)}
+
+function validate_plan() { ( set -euo pipefail
+  commits=$(jsonnet "pr-stack-plan.jsonnet" | jq -r '.[].commits[]')
+  expected_commits=$(git log '@{upstream}..HEAD' --pretty=format:"%H")
+  if ! diff --color -U1000 <(echo "${commits}") <(echo "${expected_commits}"); then
+    echo "^^ plan doesn't include all commits"
+  fi
+)}
+
+
+cmd="${1}"
+shift
+
+case "${cmd}" in
+
+generate-create-plan)
+  generate_create_plan
+  ;;
+
+create)
+  validate_plan
+  ;;
+
+rebase)
+  rebase_all
+  ;;
+
+open)
+  open_prs_in_browser
+  ;;
+
+submit-all-prs)
+  submit_all_prs
+  ;;
+
+*)
+  echo "Unknown command: ${cmd}"
+  exit 1
+  ;;
+esac
