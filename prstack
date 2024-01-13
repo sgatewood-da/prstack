@@ -63,6 +63,13 @@ function open_prs_in_browser() { ( set -euo pipefail
   done
 )}
 
+function checkout() { ( set -euo pipefail
+  local stack_name="${1}"
+  local num="${2}"
+  branch=$(show "${stack_name}" | jq -re ".[$((num-1))].branch")
+  git checkout "${branch}"
+)}
+
 function submit_all_prs() { ( set -euo pipefail
   local stack_name="${1}"
   stack=$(show "${stack_name}")
@@ -154,10 +161,10 @@ function ensure_branches() { ( set -euo pipefail
     )}
 
     function get_body() { ( set -euo pipefail
-      echo "# Links"
+      echo "## Links"
       echo "- prev: $(get_prev_url || echo "(none)")"
       echo "- next: $(get_next_url || echo "(none)")"
-      echo -n "# Description"
+      echo -n "## Description"
     )}
 
     function create_new_pr() { ( set -euo pipefail
@@ -166,9 +173,9 @@ function ensure_branches() { ( set -euo pipefail
 
     function edit_existing_pr() { ( set -euo pipefail
       body_json=$(gh pr view "${branch}" --json body)
-      splitter="# Description"
+      splitter="## Description"
       body=$(jq -re '.body' <<< "${body_json}")
-      stuff_to_save=${body#*$splitter}
+      stuff_to_save=''
       full_body=$(
         get_body
         echo "${stuff_to_save}"
@@ -232,6 +239,10 @@ sync)
 
 open)
   open_prs_in_browser "${stack_name}" "${1:-}"
+  ;;
+
+checkout)
+  checkout "${stack_name}" "${1}"
   ;;
 
 rebase-all)
