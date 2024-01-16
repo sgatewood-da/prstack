@@ -34,10 +34,7 @@ function open_pr() {
 
 function submit_pr() {
   local ref="${1}"
-  [ -z "${ref}" ] && ref=$(git branch --show-current)
-  echo "are you extra sure?"
-  exit 1
-#  gh pr ready "${ref}"
+  gh pr ready "${ref}"
 }
 
 function open_prs_in_browser() { ( set -euo pipefail
@@ -59,7 +56,7 @@ function open_prs_in_browser() { ( set -euo pipefail
 
   num_branches=$(jq 'length' <<< "${stack}")
   for i in $(seq 0 $((num_branches-1))); do
-    open_pr_num "${i}"
+    open_pr_num "$((i+1))"
   done
 )}
 
@@ -255,6 +252,10 @@ top)
 
 list)
   ls "${prstack_home}"
+  ;;
+
+submit)
+  submit_all_prs "${stack_name}"
   ;;
 
 *)
