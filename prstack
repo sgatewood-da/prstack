@@ -141,31 +141,34 @@ function ensure_branches() { ( set -euo pipefail
       git push origin "${branch}"
     fi
 
-    function get_prev_url() { ( set -euo pipefail
-      if [[ "${i}" == 0 ]]; then
-        return 1
-      fi
-      prev=$(jq -re ".[$((i-1))].branch" <<< "${stack}")
-      gh pr view "${prev}" --json url | jq -re '.url'
-    )}
+    function get_links() { ( set -euo pipefail
+      local num="${1}"
+      for j in $(seq 0 $((num_branches-1))); do
 
-    function get_next_url() { ( set -euo pipefail
-      if [[ "${i}" == $((num_branches-1)) ]]; then
-        return 1
-      fi
-      next=$(jq -re ".[$((i+1))].branch" <<< "${stack}")
-      gh pr view "${next}" --json url | jq -re '.url'
+        echo -n "- "
+
+        if [[ "${j}" == "${num}" ]]; then
+          echo -n "🐣 "
+        else
+          echo -n "🥚 "
+        fi
+
+        local branch
+        branch=$(jq -re ".[$j].branch" <<< "${stack}")
+        gh pr view "${branch}" --json url | jq -re '.url' || true
+      done
     )}
 
     function get_body() { ( set -euo pipefail
+      local num="${1}"
       echo "## Links"
-      echo "- prev: $(get_prev_url || echo "(none)")"
-      echo "- next: $(get_next_url || echo "(none)")"
+      get_links "${i}"
+      echo
       echo -n "## Description"
     )}
 
     function create_new_pr() { ( set -euo pipefail
-      get_body | gh pr create --draft --head "${branch}" --title "${title}" --base "${upstream}" --body-file -
+      get_body "${i}" | gh pr create --draft --head "${branch}" --title "${title}" --base "${upstream}" --body-file -
     )}
 
     function edit_existing_pr() { ( set -euo pipefail
@@ -174,7 +177,7 @@ function ensure_branches() { ( set -euo pipefail
       body=$(jq -re '.body' <<< "${body_json}")
       stuff_to_save=''
       full_body=$(
-        get_body
+        get_body "${i}"
         echo "${stuff_to_save}"
       )
       gh pr edit "${branch}" --body "${full_body}" --base "${upstream}"
