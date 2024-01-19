@@ -4,13 +4,13 @@ import shlex
 import subprocess
 import typing
 import webbrowser
-from tempfile import NamedTemporaryFile
 
 import rich
 import typer
 
 prstack_home = pathlib.Path.home() / ".prstack"
-app = typer.Typer()
+prstack_pointer = prstack_home / "current"
+app = typer.Typer(pretty_exceptions_enable=False)
 
 
 def cmd(cmd: str) -> str:
@@ -174,6 +174,25 @@ class Stack:
         yield from self.get_pr_links(marker)
         yield "\n## Description"
 
+    def rebase_all(self) -> None:
+        stack = self.load()
+        for i, item in enumerate(stack):
+            upstream = "master" if i == 0 else stack[i - 1].branch
+            print(cmd(f'git checkout "{item.branch}"'))
+            print(cmd(f'git fetch origin "{upstream}"'))
+            print(cmd(f'git rebase'))
+            subprocess.run(shlex.split("bash /Users/seangatewood/scripts/aliasscripts/sendit.sh"), capture_output=False,
+                           check=True)
+
+
+@app.command()
+def use(stack_name: str):
+    prstack_pointer.write_text(stack_name)
+
+
+def get_pointer_value() -> str:
+    return prstack_pointer.read_text()
+
 
 @app.command()
 def generate(stack_name: str):
@@ -183,22 +202,28 @@ def generate(stack_name: str):
 
 
 @app.command()
-def show(stack_name: str):
+def show(stack_name: typing.Annotated[str, typer.Argument(default_factory=get_pointer_value)]):
     stack = Stack(stack_name)
     stack.show()
 
 
 @app.command()
-def sync(stack_name: str):
+def sync(stack_name: typing.Annotated[str, typer.Argument(default_factory=get_pointer_value)]):
     stack = Stack(stack_name)
     stack.ensure_branches()
     stack.ensure_prs()
 
 
-@app.command()
-def open(stack_name: str, num: int):
+@app.command(name="open")
+def cmd_open(num: int, stack_name: typing.Annotated[str, typer.Argument(default_factory=get_pointer_value)]):
     stack = Stack(stack_name)
     stack.open_pr(num)
+
+
+@app.command()
+def rebase_all(stack_name: typing.Annotated[str, typer.Argument(default_factory=get_pointer_value)]):
+    stack = Stack(stack_name)
+    stack.rebase_all()
 
 
 if __name__ == "__main__":
