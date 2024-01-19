@@ -167,6 +167,10 @@ class Stack:
         branch = self.load(include_disabled=True)[num - 1].branch
         PullRequest(branch).open()
 
+    def open_all_prs(self):
+        for item in self.load(include_disabled=True):
+            PullRequest(item.branch).open()
+
     def ensure_prs(self) -> None:
         for i, item in enumerate(self.load()):
             branch = item.branch
@@ -207,6 +211,10 @@ class Stack:
         items[num - 1].enabled = True
         self.store(items)
 
+    def checkout(self, num: int) -> None:
+        branch = self.load(include_disabled=True)[num - 1].branch
+        print(cmd(f"git checkout {branch}"))
+
 
 @app.command()
 def use(stack_name: str):
@@ -234,9 +242,13 @@ def sync(stack_name: typing.Annotated[str, typer.Argument(default_factory=get_po
 
 
 @app.command(name="open")
-def cmd_open(num: int, stack_name: typing.Annotated[str, typer.Argument(default_factory=get_pointer_value)]):
+def cmd_open(num: typing.Annotated[int, typer.Argument(default_factory=lambda: None)],
+             stack_name: typing.Annotated[str, typer.Argument(default_factory=get_pointer_value)]):
     stack = Stack(stack_name)
-    stack.open_pr(num)
+    if num is not None:
+        stack.open_pr(num)
+    else:
+        stack.open_all_prs()
 
 
 @app.command()
@@ -257,6 +269,12 @@ def disable(num: int, stack_name: typing.Annotated[str, typer.Argument(default_f
     stack = Stack(stack_name)
     stack.disable(num)
     stack.show()
+
+
+@app.command()
+def checkout(num: int, stack_name: typing.Annotated[str, typer.Argument(default_factory=get_pointer_value)]):
+    stack = Stack(stack_name)
+    stack.checkout(num)
 
 
 if __name__ == "__main__":

@@ -3,34 +3,34 @@ set -euo pipefail
 
 prstack_home=~/.prstack
 
-function rebase_all() { ( set -euo pipefail
-  local stack_name="${1}"
-  stack=$(show "${stack_name}")
+#function rebase_all() { ( set -euo pipefail
+#  local stack_name="${1}"
+#  stack=$(show "${stack_name}")
+#
+#  num_branches=$(jq 'length' <<< "${stack}")
+#  for i in $(seq 0 $((num_branches-1))); do
+#    item=$(jq ".[$i]" <<< "${stack}")
+#    branch=$(jq -re '.branch' <<< "${item}")
+#
+#    if [[ "${i}" == 0 ]]; then
+#      upstream="master"
+#    else
+#      upstream=$(jq -re ".[$((i-1))].branch" <<< "${stack}")
+#    fi
+#
+#    git checkout "${branch}"
+#    git fetch origin "${upstream}"
+#    git rebase
+#    /Users/seangatewood/scripts/aliasscripts/sendit.sh
+#  done
+#)}
 
-  num_branches=$(jq 'length' <<< "${stack}")
-  for i in $(seq 0 $((num_branches-1))); do
-    item=$(jq ".[$i]" <<< "${stack}")
-    branch=$(jq -re '.branch' <<< "${item}")
-
-    if [[ "${i}" == 0 ]]; then
-      upstream="master"
-    else
-      upstream=$(jq -re ".[$((i-1))].branch" <<< "${stack}")
-    fi
-
-    git checkout "${branch}"
-    git fetch origin "${upstream}"
-    git rebase
-    /Users/seangatewood/scripts/aliasscripts/sendit.sh
-  done
-)}
-
-
-function open_pr() {
-  local ref="${1}"
-  [ -z "${ref}" ] && ref=$(git branch --show-current)
-  gh pr view "${ref}" --web
-}
+#
+#function open_pr() {
+#  local ref="${1}"
+#  [ -z "${ref}" ] && ref=$(git branch --show-current)
+#  gh pr view "${ref}" --web
+#}
 
 function submit_pr() {
   local ref="${1}"
@@ -60,12 +60,12 @@ function open_prs_in_browser() { ( set -euo pipefail
   done
 )}
 
-function checkout() { ( set -euo pipefail
-  local stack_name="${1}"
-  local num="${2}"
-  branch=$(show "${stack_name}" | jq -re ".[$((num-1))].branch")
-  git checkout "${branch}"
-)}
+#function checkout() { ( set -euo pipefail
+#  local stack_name="${1}"
+#  local num="${2}"
+#  branch=$(show "${stack_name}" | jq -re ".[$((num-1))].branch")
+#  git checkout "${branch}"
+#)}
 
 function submit_all_prs() { ( set -euo pipefail
   local stack_name="${1}"
