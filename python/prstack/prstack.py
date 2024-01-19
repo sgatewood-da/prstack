@@ -78,11 +78,13 @@ class PullRequest:
 
 class StackItem:
 
-    def __init__(self, subject: str, branch: str, title: str, initial_sha: str, prev=None, upstream=None) -> None:
+    def __init__(self, subject: str, branch: str, title: str, initial_sha: str, enabled: bool, prev=None,
+                 upstream=None) -> None:
         self.subject = subject
         self.branch = branch
         self.title = title
         self.initial_sha = initial_sha
+        self.enabled = enabled
         self.prev = prev
         self.upstream = upstream
 
@@ -91,7 +93,8 @@ class StackItem:
             "subject": self.subject,
             "branch": self.branch,
             "title": self.title,
-            "initial_sha": self.initial_sha
+            "initial_sha": self.initial_sha,
+            "enabled": self.enabled,
         }
 
 
@@ -101,30 +104,15 @@ class Stack:
         self.name = name
 
     def generate_stack_items(self) -> typing.Generator[StackItem, None, None]:
-        for i, sha in enumerate(cmd("git log --reverse '@{upstream}..HEAD' --pretty=format:'%H'").splitlines()):
+        for i, sha in enumerate(cmd("git log --reverse 'master..HEAD' --pretty=format:'%H'").splitlines()):
             subject = cmd(f'git log --format="%s" -n 1 "{sha}"')
             yield StackItem(
                 subject=subject,
                 branch=f"prstack-{self.name}-{i + 1}",
                 title=f"{i + 1}) {subject}",
-                initial_sha=sha
+                initial_sha=sha,
+                enabled=True
             )
-
-    def get_path(self) -> pathlib.Path:
-        return pathlib.Path.home() / ".prstack" / self.name / "stack.jsonnet"
-
-    def load_json(self) -> str:
-        return cmd(f"jsonnet {self.get_path().absolute()}")
-
-    def load(self) -> typing.List[StackItem]:
-        items = [StackItem(**d) for d in json.loads(self.load_json())]
-        for i, item in enumerate(items):
-            item.prev = None if i == 0 else items[i-1]
-            item.upstream = "master" if i == 0 else item.prev.branch
-        return items
-
-    def show(self) -> None:
-        rich.print_json(self.load_json())
 
     def generate_file(self) -> None:
         stack_file = self.get_path()
@@ -137,6 +125,28 @@ class Stack:
 
         stack = [s.to_dict() for s in self.generate_stack_items()]
         stack_file.write_text(json.dumps(stack))
+        cmd(f"jsonnetfmt -i {stack_file.absolute()}")
+
+    def get_path(self) -> pathlib.Path:
+        return pathlib.Path.home() / ".prstack" / self.name / "stack.jsonnet"
+
+    def load_json(self) -> str:
+        return cmd(f"jsonnet {self.get_path().absolute()}")
+
+    def show(self) -> None:
+        rich.print_json(self.load_json())
+
+    def load(self, include_disabled=False) -> typing.List[StackItem]:
+        items = [StackItem(**d) for d in json.loads(self.load_json())]
+        items = [item for item in items if item.enabled or include_disabled]
+        for i, item in enumerate(items):
+            item.prev = None if i == 0 else items[i - 1]
+            item.upstream = "master" if i == 0 else item.prev.branch
+        return items
+
+    def store(self, items: typing.List[StackItem]) -> None:
+        stack_file = self.get_path()
+        stack_file.write_text(json.dumps([s.to_dict() for s in items]))
         cmd(f"jsonnetfmt -i {stack_file.absolute()}")
 
     def ensure_branches(self) -> None:
@@ -154,7 +164,7 @@ class Stack:
                 print(cmd(f'git push origin "{branch}"'))
 
     def open_pr(self, num: int) -> None:
-        branch = self.load()[num - 1].branch
+        branch = self.load(include_disabled=True)[num - 1].branch
         PullRequest(branch).open()
 
     def ensure_prs(self) -> None:
@@ -186,6 +196,16 @@ class Stack:
             print(cmd(f'git rebase'))
             subprocess.run(shlex.split("bash /Users/seangatewood/scripts/aliasscripts/sendit.sh"), capture_output=False,
                            check=True)
+
+    def disable(self, num: int) -> None:
+        items = self.load(include_disabled=True)
+        items[num - 1].enabled = False
+        self.store(items)
+
+    def enable(self, num: int) -> None:
+        items = self.load(include_disabled=True)
+        items[num - 1].enabled = True
+        self.store(items)
 
 
 @app.command()
@@ -223,6 +243,20 @@ def cmd_open(num: int, stack_name: typing.Annotated[str, typer.Argument(default_
 def rebase_all(stack_name: typing.Annotated[str, typer.Argument(default_factory=get_pointer_value)]):
     stack = Stack(stack_name)
     stack.rebase_all()
+
+
+@app.command()
+def enable(num: int, stack_name: typing.Annotated[str, typer.Argument(default_factory=get_pointer_value)]):
+    stack = Stack(stack_name)
+    stack.enable(num)
+    stack.show()
+
+
+@app.command()
+def disable(num: int, stack_name: typing.Annotated[str, typer.Argument(default_factory=get_pointer_value)]):
+    stack = Stack(stack_name)
+    stack.disable(num)
+    stack.show()
 
 
 if __name__ == "__main__":
