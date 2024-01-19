@@ -141,75 +141,75 @@ function ensure_branches() { ( set -euo pipefail
 #      git push origin "${branch}"
 #    fi
 
-    function get_links() { ( set -euo pipefail
-      local num="${1}"
-      for j in $(seq 0 $((num_branches-1))); do
-
-        echo -n "- "
-
-        if [[ "${j}" == "${num}" ]]; then
-          echo -n "🐣 "
-        else
-          echo -n "🥚 "
-        fi
-
-        local branch
-        branch=$(jq -re ".[$j].branch" <<< "${stack}")
-        gh pr view "${branch}" --json url | jq -re '.url' || true
-      done
-    )}
-
-    function get_body() { ( set -euo pipefail
-      local num="${1}"
-      echo "## Links"
-      get_links "${i}"
-      echo
-      echo -n "## Description"
-    )}
-
-    function create_new_pr() { ( set -euo pipefail
-      get_body "${i}" | gh pr create --draft --head "${branch}" --title "${title}" --base "${upstream}" --body-file -
-    )}
-
-    function edit_existing_pr() { ( set -euo pipefail
-      body_json=$(gh pr view "${branch}" --json body)
-      splitter="## Description"
-      body=$(jq -re '.body' <<< "${body_json}")
-      stuff_to_save=''
-      full_body=$(
-        get_body "${i}"
-        echo "${stuff_to_save}"
-      )
-      gh pr edit "${branch}" --body "${full_body}" --base "${upstream}"
-    )}
+#    function get_links() { ( set -euo pipefail
+#      local num="${1}"
+#      for j in $(seq 0 $((num_branches-1))); do
+#
+#        echo -n "- "
+#
+#        if [[ "${j}" == "${num}" ]]; then
+#          echo -n "🐣 "
+#        else
+#          echo -n "🥚 "
+#        fi
+#
+#        local branch
+#        branch=$(jq -re ".[$j].branch" <<< "${stack}")
+#        gh pr view "${branch}" --json url | jq -re '.url' || true
+#      done
+#    )}
+#
+#    function get_body() { ( set -euo pipefail
+#      local num="${1}"
+#      echo "## Links"
+#      get_links "${i}"
+#      echo
+#      echo -n "## Description"
+#    )}
+#
+#    function create_new_pr() { ( set -euo pipefail
+#      get_body "${i}" | gh pr create --draft --head "${branch}" --title "${title}" --base "${upstream}" --body-file -
+#    )}
+#
+#    function edit_existing_pr() { ( set -euo pipefail
+#      body_json=$(gh pr view "${branch}" --json body)
+#      splitter="## Description"
+#      body=$(jq -re '.body' <<< "${body_json}")
+#      stuff_to_save=''
+#      full_body=$(
+#        get_body "${i}"
+#        echo "${stuff_to_save}"
+#      )
+#      gh pr edit "${branch}" --body "${full_body}" --base "${upstream}"
+#    )}
 
     # ensure PR
-    if status=$(gh pr view "${branch}" --json state | jq -re '.state'); then
-      if [[ "${status}" == "CLOSED" ]]; then
-        create_new_pr
-      else
-        edit_existing_pr
-      fi
-    else
-      create_new_pr
-    fi
-  done
+#    if status=$(gh pr view "${branch}" --json state | jq -re '.state'); then
+#      if [[ "${status}" == "CLOSED" ]]; then
+#        create_new_pr
+#      else
+#        edit_existing_pr
+#      fi
+#    else
+#      create_new_pr
+#    fi
+#  done
 )}
-
-function show() { ( set -euo pipefail
-  local stack_name="${1}"
-
-  stack_folder="${prstack_home}/${stack_name}"
-  stack_file="${stack_folder}/stack.jsonnet"
-
-  jsonnet "${stack_file}" | jq
-)}
-  
-function sync() { ( set -euo pipefail
-  local stack_name="${1}"
-  stack=$(show "${stack_name}")
-  ensure_branches "${stack}"
-)}
+#
+#function show() { ( set -euo pipefail
+#  local stack_name="${1}"
+#
+#  stack_folder="${prstack_home}/${stack_name}"
+#  stack_file="${stack_folder}/stack.jsonnet"
+#
+#  jsonnet "${stack_file}" | jq
+#)}
+##
+#function sync() { ( set -euo pipefail
+#  local stack_name="${1}"
+#  stack=$(show "${stack_name}")
+#  ensure_branches "${stack}"
+#)}
 
 function checkout_top() { ( set -euo pipefail
   local stack_name="${1}"
