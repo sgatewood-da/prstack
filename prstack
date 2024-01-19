@@ -112,34 +112,34 @@ function submit_all_prs() { ( set -euo pipefail
 #)}
 
 function ensure_branches() { ( set -euo pipefail
-  local stack="${1}"
-
-  num_branches=$(jq 'length' <<< "${stack}")
-  for i in $(seq 0 $((num_branches-1))); do
-    item=$(jq ".[$i]" <<< "${stack}")
-    branch=$(jq -re '.branch' <<< "${item}")
-    title=$(jq -re '.title' <<< "${item}")
-
-    echo "ensure branch: ${branch}"
-
-    # if branch doesn't exist locally, create it from the initialSha
-    if ! git rev-parse --verify "${branch}" &>/dev/null; then
-      initial_sha=$(jq -re '.initialSha' <<< "${item}")
-      git branch "${branch}" "${initial_sha}"
-    fi
-
-    # set upstream branch
-    if [[ "${i}" == 0 ]]; then
-      upstream="master"
-    else
-      upstream=$(jq -re ".[$((i-1))].branch" <<< "${stack}")
-    fi
-    git branch -u "origin/${upstream}" "${branch}"
-
-    # push branch if it's only local
-    if ! git rev-parse --verify "origin/${branch}" &>/dev/null; then
-      git push origin "${branch}"
-    fi
+#  local stack="${1}"
+#
+#  num_branches=$(jq 'length' <<< "${stack}")
+#  for i in $(seq 0 $((num_branches-1))); do
+#    item=$(jq ".[$i]" <<< "${stack}")
+#    branch=$(jq -re '.branch' <<< "${item}")
+#    title=$(jq -re '.title' <<< "${item}")
+#
+#    echo "ensure branch: ${branch}"
+#
+#    # if branch doesn't exist locally, create it from the initialSha
+#    if ! git rev-parse --verify "${branch}" &>/dev/null; then
+#      initial_sha=$(jq -re '.initialSha' <<< "${item}")
+#      git branch "${branch}" "${initial_sha}"
+#    fi
+#
+#    # set upstream branch
+#    if [[ "${i}" == 0 ]]; then
+#      upstream="master"
+#    else
+#      upstream=$(jq -re ".[$((i-1))].branch" <<< "${stack}")
+#    fi
+#    git branch -u "origin/${upstream}" "${branch}"
+#
+#    # push branch if it's only local
+#    if ! git rev-parse --verify "origin/${branch}" &>/dev/null; then
+#      git push origin "${branch}"
+#    fi
 
     function get_links() { ( set -euo pipefail
       local num="${1}"
