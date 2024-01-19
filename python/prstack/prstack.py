@@ -13,6 +13,10 @@ prstack_pointer = prstack_home / "current"
 app = typer.Typer(pretty_exceptions_enable=False)
 
 
+def get_pointer_value() -> str:
+    return prstack_pointer.read_text()
+
+
 def cmd(cmd: str) -> str:
     print(f">>> {cmd}")
     return subprocess.check_output(shlex.split(cmd)).decode().strip()
@@ -74,11 +78,13 @@ class PullRequest:
 
 class StackItem:
 
-    def __init__(self, subject: str, branch: str, title: str, initial_sha: str) -> None:
+    def __init__(self, subject: str, branch: str, title: str, initial_sha: str, prev=None, upstream=None) -> None:
         self.subject = subject
         self.branch = branch
         self.title = title
         self.initial_sha = initial_sha
+        self.prev = prev
+        self.upstream = upstream
 
     def to_dict(self) -> typing.Dict:
         return {
@@ -111,7 +117,11 @@ class Stack:
         return cmd(f"jsonnet {self.get_path().absolute()}")
 
     def load(self) -> typing.List[StackItem]:
-        return [StackItem(**d) for d in json.loads(self.load_json())]
+        items = [StackItem(**d) for d in json.loads(self.load_json())]
+        for i, item in enumerate(items):
+            item.prev = None if i == 0 else items[i-1]
+            item.upstream = "master" if i == 0 else item.prev.branch
+        return items
 
     def show(self) -> None:
         rich.print_json(self.load_json())
@@ -130,17 +140,14 @@ class Stack:
         cmd(f"jsonnetfmt -i {stack_file.absolute()}")
 
     def ensure_branches(self) -> None:
-        stack = self.load()
-        for i, item in enumerate(stack):
+        for item in self.load():
             branch = item.branch
 
             # if branch doesn't exist locally, create it from the initialSha
             if not branch_exists(branch):
                 print(cmd(f'git branch "{branch}" "{item.initial_sha}"'))
 
-            # set upstream branch
-            upstream = "master" if i == 0 else stack[i - 1].branch
-            print(cmd(f'git branch -u "origin/{upstream}" "{branch}"'))
+            print(cmd(f'git branch -u "origin/{item.upstream}" "{branch}"'))
 
             # push branch if it's only local
             if not branch_exists(f"origin/{branch}"):
@@ -151,15 +158,13 @@ class Stack:
         PullRequest(branch).open()
 
     def ensure_prs(self) -> None:
-        stack = self.load()
-        for i, item in enumerate(stack):
+        for i, item in enumerate(self.load()):
             branch = item.branch
 
-            upstream = "master" if i == 0 else stack[i - 1].branch
             body_prefix = "".join(self.get_pr_body(i))
             PullRequest(branch).ensure(
                 title=item.title,
-                base=upstream,
+                base=item.upstream,
                 body=body_prefix
             )
 
@@ -175,11 +180,9 @@ class Stack:
         yield "\n## Description"
 
     def rebase_all(self) -> None:
-        stack = self.load()
-        for i, item in enumerate(stack):
-            upstream = "master" if i == 0 else stack[i - 1].branch
+        for item in self.load():
             print(cmd(f'git checkout "{item.branch}"'))
-            print(cmd(f'git fetch origin "{upstream}"'))
+            print(cmd(f'git fetch origin "{item.upstream}"'))
             print(cmd(f'git rebase'))
             subprocess.run(shlex.split("bash /Users/seangatewood/scripts/aliasscripts/sendit.sh"), capture_output=False,
                            check=True)
@@ -188,10 +191,6 @@ class Stack:
 @app.command()
 def use(stack_name: str):
     prstack_pointer.write_text(stack_name)
-
-
-def get_pointer_value() -> str:
-    return prstack_pointer.read_text()
 
 
 @app.command()
