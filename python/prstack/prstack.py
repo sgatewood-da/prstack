@@ -26,21 +26,67 @@ def branch_exists(branch: str) -> bool:
         return False
 
 
-def get_pr_link(branch: str) -> str:
-    try:
-        return json.loads(cmd(f'gh pr view "{branch}" --json url'))['url']
-    except subprocess.CalledProcessError:
-        return "(none)"
+class PullRequest:
+
+    def __init__(self, ref: str) -> None:
+        self.ref = ref
+
+    def get_link(self) -> str:
+        try:
+            return json.loads(cmd(f'gh pr view "{self.ref}" --json url'))['url']
+        except subprocess.CalledProcessError:
+            return "(none)"
+
+    def create(self, title: str, base: str, body: str) -> None:
+        print(cmd(f'gh pr create --draft --head "{self.ref}" --title "{title}" --base "{base}" --body \'{body}\''))
+
+    def edit(self, base: str, body_prefix: str) -> None:
+        current_body = json.loads(cmd(f'gh pr view "{self.ref}" --json body'))['body']
+        new_body = body_prefix + current_body.split("## Description")[1]
+        print(cmd(f'gh pr edit "{self.ref}" --body \'{new_body}\' --base "{base}"'))
+
+    def open(self) -> None:
+        link = self.get_link()
+        if link != "(none)":
+            webbrowser.open(link)
+        else:
+            print('no PR found :(')
+
+    def get_state(self) -> str:
+        try:
+            return json.loads(cmd(f'gh pr view "{self.ref}" --json state'))["state"]
+        except subprocess.CalledProcessError:
+            return "CLOSED"
+
+    def ensure(self, title: str, base: str, body: str) -> None:
+        if self.get_state() == "CLOSED":
+            self.create(
+                title=title,
+                base=base,
+                body=body
+            )
+        else:
+            self.edit(
+                base=base,
+                body_prefix=body
+            )
 
 
-def create_pr(branch: str, title: str, base: str, body: str) -> None:
-    print(cmd(f'gh pr create --draft --head "{branch}" --title "{title}" --base "{base}" --body \'{body}\''))
+class StackItem:
 
+    def __init__(self, subject: str, branch: str, title: str, initial_sha: str) -> None:
+        self.subject = subject
+        self.branch = branch
+        self.title = title
+        self.initial_sha = initial_sha
 
-def edit_existing_pr(branch: str, base: str, body_prefix: str) -> None:
-    current_body = json.loads(cmd(f'gh pr view "{branch}" --json body'))['body']
-    new_body = body_prefix + current_body.split("## Description")[1]
-    print(cmd(f'gh pr edit "{branch}" --body \'{new_body}\' --base "{base}"'))
+    def to_dict(self) -> typing.Dict:
+        return {
+            "subject": self.subject,
+            "branch": self.branch,
+            "title": self.title,
+            "initial_sha": self.initial_sha
+        }
 
 
 class Stack:
@@ -48,15 +94,15 @@ class Stack:
     def __init__(self, name: str) -> None:
         self.name = name
 
-    def generate_dicts(self) -> typing.Generator:
+    def generate_stack_items(self) -> typing.Generator[StackItem, None, None]:
         for i, sha in enumerate(cmd("git log --reverse '@{upstream}..HEAD' --pretty=format:'%H'").splitlines()):
             subject = cmd(f'git log --format="%s" -n 1 "{sha}"')
-            yield {
-                "subject": subject,
-                "branch": f"prstack-{self.name}-{i+1}",
-                "title": f"{i+1}) {subject}",
-                "initialSha": sha
-            }
+            yield StackItem(
+                subject=subject,
+                branch=f"prstack-{self.name}-{i + 1}",
+                title=f"{i + 1}) {subject}",
+                initial_sha=sha
+            )
 
     def get_path(self) -> pathlib.Path:
         return pathlib.Path.home() / ".prstack" / self.name / "stack.jsonnet"
@@ -64,8 +110,8 @@ class Stack:
     def load_json(self) -> str:
         return cmd(f"jsonnet {self.get_path().absolute()}")
 
-    def load(self) -> typing.List[typing.Dict]:
-        return json.loads(self.load_json())
+    def load(self) -> typing.List[StackItem]:
+        return [StackItem(**d) for d in json.loads(self.load_json())]
 
     def show(self) -> None:
         rich.print_json(self.load_json())
@@ -79,21 +125,21 @@ class Stack:
 
         stack_file.parent.mkdir(exist_ok=True)
 
-        stack = list(self.generate_dicts())
+        stack = [s.to_dict() for s in self.generate_stack_items()]
         stack_file.write_text(json.dumps(stack))
         cmd(f"jsonnetfmt -i {stack_file.absolute()}")
 
     def ensure_branches(self) -> None:
         stack = self.load()
-        for i, d in enumerate(stack):
-            branch = d['branch']
+        for i, item in enumerate(stack):
+            branch = item.branch
 
             # if branch doesn't exist locally, create it from the initialSha
             if not branch_exists(branch):
-                print(cmd(f'git branch "{branch}" "{d["initialSha"]}"'))
+                print(cmd(f'git branch "{branch}" "{item.initial_sha}"'))
 
             # set upstream branch
-            upstream = "master" if i == 0 else stack[i - 1]['branch']
+            upstream = "master" if i == 0 else stack[i - 1].branch
             print(cmd(f'git branch -u "origin/{upstream}" "{branch}"'))
 
             # push branch if it's only local
@@ -101,41 +147,27 @@ class Stack:
                 print(cmd(f'git push origin "{branch}"'))
 
     def open_pr(self, num: int) -> None:
-        link = get_pr_link(self.load()[num - 1]['branch'])
-        if link != "(none)":
-            webbrowser.open(link)
-        else:
-            print('no PR found :(')
+        branch = self.load()[num - 1].branch
+        PullRequest(branch).open()
 
     def ensure_prs(self) -> None:
         stack = self.load()
-        for i, d in enumerate(stack):
-            branch = d['branch']
-            try:
-                current_pr_state = json.loads(cmd(f'gh pr view "{branch}" --json state'))["state"]
-            except subprocess.CalledProcessError:
-                current_pr_state = "CLOSED"
+        for i, item in enumerate(stack):
+            branch = item.branch
 
-            upstream = "master" if i == 0 else stack[i - 1]['branch']
+            upstream = "master" if i == 0 else stack[i - 1].branch
             body_prefix = "".join(self.get_pr_body(i))
-
-            if current_pr_state == "CLOSED":
-                create_pr(
-                    branch=branch,
-                    title=d['title'],
-                    base=upstream,
-                    body=body_prefix
-                )
-            else:
-                edit_existing_pr(
-                    branch=branch,
-                    base=upstream,
-                    body_prefix=body_prefix)
+            PullRequest(branch).ensure(
+                title=item.title,
+                base=upstream,
+                body=body_prefix
+            )
 
     def get_pr_links(self, marker: int) -> typing.Generator:
-        for i, d in enumerate(self.load()):
+        for i, item in enumerate(self.load()):
             emoji = '🐣' if i == marker else '🥚'
-            yield f"- {emoji} {get_pr_link(d['branch'])}\n"
+            link = PullRequest(item.branch).get_link()
+            yield f"- {emoji} {link}\n"
 
     def get_pr_body(self, marker: int) -> typing.Generator:
         yield "## Links\n"
