@@ -79,37 +79,37 @@ function submit_all_prs() { ( set -euo pipefail
   done
 )}
 
-function get_commit_yaml() { ( set -euo pipefail
-  local stack_name="${1}"
-
-  function get_branch_name() { ( set -euo pipefail
-    local num="${1}"
-    local subject="${2}"
-    echo "prstack-${stack_name}-${num}"
-  )}
-
-  num=1
-  while IFS= read -r sha || [ -n "${sha}" ]; do
-    subject=$(git log --format='%s' -n 1 "${sha}")
-    branch=$(get_branch_name "${num}" "${subject}")
-    echo "- title: ${num}) ${subject}"
-    echo "  branch: ${branch}"
-    echo "  initialSha: ${sha}"
-    ((num++))
-  done
-)}
+#function get_commit_yaml() { ( set -euo pipefail
+#  local stack_name="${1}"
+#
+#  function get_branch_name() { ( set -euo pipefail
+#    local num="${1}"
+#    local subject="${2}"
+#    echo "prstack-${stack_name}-${num}"
+#  )}
+#
+#  num=1
+#  while IFS= read -r sha || [ -n "${sha}" ]; do
+#    subject=$(git log --format="%s" -n 1 "${sha}")
+#    branch=$(get_branch_name "${num}" "${subject}")
+#    echo "- title: ${num}) ${subject}"
+#    echo "  branch: ${branch}"
+#    echo "  initialSha: ${sha}"
+#    ((num++))
+#  done
+#)}
   
-function generate() { ( set -euo pipefail
-  local stack_name="${1}"
-
-  stack_folder="${prstack_home}/${stack_name}"
-  mkdir -p "${stack_folder}"
-
-  stack_file="${stack_folder}/stack.jsonnet"
-  git log --reverse '@{upstream}..HEAD' --pretty=format:"%H" | get_commit_yaml "${stack_name}" | yq eval -o json | jq '.[]' --slurp | jsonnetfmt - > "${stack_file}"
-  cat "${stack_file}"
-  echo "Created ${stack_file}"
-)}
+#function generate() { ( set -euo pipefail
+#  local stack_name="${1}"
+#
+#  stack_folder="${prstack_home}/${stack_name}"
+#  mkdir -p "${stack_folder}"
+#
+#  stack_file="${stack_folder}/stack.jsonnet"
+#  git log --reverse '@{upstream}..HEAD' --pretty=format:"%H" | get_commit_yaml "${stack_name}" | yq eval -o json | jq '.[]' --slurp | jsonnetfmt - > "${stack_file}"
+#  cat "${stack_file}"
+#  echo "Created ${stack_file}"
+#)}
 
 function ensure_branches() { ( set -euo pipefail
   local stack="${1}"
