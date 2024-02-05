@@ -59,27 +59,23 @@ class PullRequest:
     def __init__(self, ref: str) -> None:
         self.ref = ref
 
-    @async_main
-    async def get_link(self) -> str:
-        return await self.get_link_async()
-
-    async def get_link_async(self) -> str:
+    def get_link(self) -> str:
         try:
             if self.ref in PR_LINK_CACHE:
                 return PR_LINK_CACHE[self.ref]
-            url = json.loads(await cmd_async(f'gh pr view "{self.ref}" --json url'))['url']
+            url = json.loads(cmd(f'gh pr view "{self.ref}" --json url'))['url']
         except subprocess.CalledProcessError:
             url = "(none)"
         PR_LINK_CACHE[self.ref] = url
         return url
 
-    def create(self, title: str, base: str, body: str) -> None:
-        print(cmd(f'gh pr create --draft --head "{self.ref}" --title "{title}" --base "{base}" --body \'{body}\''))
+    async def create(self, title: str, base: str, body: str) -> None:
+        print(await cmd_async(f'gh pr create --draft --head "{self.ref}" --title "{title}" --base "{base}" --body \'{body}\''))
 
-    def edit(self, base: str, body_prefix: str) -> None:
+    async def edit(self, base: str, body_prefix: str) -> None:
         current_body = json.loads(cmd(f'gh pr view "{self.ref}" --json body'))['body']
         new_body = body_prefix + current_body.split("## Description")[1]
-        print(cmd(f'gh pr edit "{self.ref}" --body \'{new_body}\' --base "{base}"'))
+        print(await cmd_async(f'gh pr edit "{self.ref}" --body \'{new_body}\' --base "{base}"'))
 
     def open(self) -> None:
         link = self.get_link()
@@ -88,21 +84,21 @@ class PullRequest:
         else:
             print('no PR found :(')
 
-    def get_state(self) -> str:
+    async def get_state(self) -> str:
         try:
-            return json.loads(cmd(f'gh pr view "{self.ref}" --json state'))["state"]
+            return json.loads(await cmd_async(f'gh pr view "{self.ref}" --json state'))["state"]
         except subprocess.CalledProcessError:
             return "CLOSED"
 
-    def ensure(self, title: str, base: str, body: str) -> None:
-        if self.get_state() == "CLOSED":
-            self.create(
+    async def ensure(self, title: str, base: str, body: str) -> None:
+        if await self.get_state() == "CLOSED":
+            await self.create(
                 title=title,
                 base=base,
                 body=body
             )
         else:
-            self.edit(
+            await self.edit(
                 base=base,
                 body_prefix=body
             )
@@ -206,30 +202,28 @@ class Stack:
         for item in self.load(include_disabled=True):
             PullRequest(item.branch).open()
 
-    def ensure_prs(self) -> None:
-        for i, item in enumerate(self.load()):
-            branch = item.branch
+    @async_main
+    async def ensure_prs(self) -> None:
 
+        async def ensure_pr(i: int, item: StackItem) -> None:
+            print("kicked off")
+            branch = item.branch
             body_prefix = "".join(self.get_pr_body(i))
-            PullRequest(branch).ensure(
+            await PullRequest(branch).ensure(
                 title=item.title,
                 base=item.upstream,
                 body=body_prefix
             )
 
-    async def get_pr_link_md(self, emoji: str, branch: str) -> str:
-        link = await PullRequest(branch).get_link_async()
-        return f"- {emoji} {link}\n"
-
-    @async_main
-    async def get_pr_links(self, marker: int) -> typing.List[str]:
-        return await asyncio.gather(*[
-            self.get_pr_link_md(
-                emoji='🐢' if i == marker else '🥚',
-                branch=item.branch
-            )
-            for i, item in enumerate(self.load())
+        await asyncio.gather(*[
+            ensure_pr(i, item) for i, item in enumerate(self.load())
         ])
+
+    def get_pr_links(self, marker: int) -> typing.Generator:
+        for i, item in enumerate(self.load()):
+            link = PullRequest(item.branch).get_link()
+            emoji = '🐢' if i == marker else '🥚'
+            yield f"- {emoji} {link}\n"
 
     def get_pr_body(self, marker: int) -> typing.Generator:
         yield "## Links\n"
