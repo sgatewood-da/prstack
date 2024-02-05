@@ -1,4 +1,5 @@
 import asyncio
+import functools
 import json
 import os
 import pathlib
@@ -15,6 +16,7 @@ import typer
 prstack_home = pathlib.Path.home() / ".prstack"
 prstack_pointer = prstack_home / "current"
 app = typer.Typer(pretty_exceptions_enable=False)
+PR_LINK_CACHE = {}
 
 
 def get_pointer_value() -> str:
@@ -63,9 +65,13 @@ class PullRequest:
 
     async def get_link_async(self) -> str:
         try:
-            return json.loads(await cmd_async(f'gh pr view "{self.ref}" --json url'))['url']
+            if self.ref in PR_LINK_CACHE:
+                return PR_LINK_CACHE[self.ref]
+            url = json.loads(await cmd_async(f'gh pr view "{self.ref}" --json url'))['url']
         except subprocess.CalledProcessError:
-            return "(none)"
+            url = "(none)"
+        PR_LINK_CACHE[self.ref] = url
+        return url
 
     def create(self, title: str, base: str, body: str) -> None:
         print(cmd(f'gh pr create --draft --head "{self.ref}" --title "{title}" --base "{base}" --body \'{body}\''))
@@ -219,7 +225,7 @@ class Stack:
     async def get_pr_links(self, marker: int) -> typing.List[str]:
         return await asyncio.gather(*[
             self.get_pr_link_md(
-                emoji='🐣' if i == marker else '🥚',
+                emoji='🐢' if i == marker else '🥚',
                 branch=item.branch
             )
             for i, item in enumerate(self.load())
