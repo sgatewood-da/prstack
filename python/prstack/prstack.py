@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import pathlib
@@ -25,6 +26,17 @@ def cmd(cmd: str) -> str:
     return subprocess.check_output(shlex.split(cmd)).decode().strip()
 
 
+async def cmd_async(cmd: str) -> str:
+    print(f">>> {cmd}", file=sys.stderr)
+    proc = await asyncio.create_subprocess_shell(cmd, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
+                                                 stderr=asyncio.subprocess.PIPE)
+    await proc.wait()
+    if proc.returncode != 0:
+        raise subprocess.CalledProcessError(proc.returncode, cmd, output=proc.stdout, stderr=proc.stderr)
+    data = await proc.stdout.read()
+    return data.decode().strip()
+
+
 def branch_exists(branch: str) -> bool:
     try:
         cmd(f'git rev-parse --verify "{branch}"')
@@ -33,14 +45,25 @@ def branch_exists(branch: str) -> bool:
         return False
 
 
+def async_main(func):
+    def wrapper(*args, **kwargs):
+        return asyncio.run(func(*args, **kwargs))
+
+    return wrapper
+
+
 class PullRequest:
 
     def __init__(self, ref: str) -> None:
         self.ref = ref
 
-    def get_link(self) -> str:
+    @async_main
+    async def get_link(self) -> str:
+        return await self.get_link_async()
+
+    async def get_link_async(self) -> str:
         try:
-            return json.loads(cmd(f'gh pr view "{self.ref}" --json url'))['url']
+            return json.loads(await cmd_async(f'gh pr view "{self.ref}" --json url'))['url']
         except subprocess.CalledProcessError:
             return "(none)"
 
@@ -188,11 +211,19 @@ class Stack:
                 body=body_prefix
             )
 
-    def get_pr_links(self, marker: int) -> typing.Generator:
-        for i, item in enumerate(self.load()):
-            emoji = '🐣' if i == marker else '🥚'
-            link = PullRequest(item.branch).get_link()
-            yield f"- {emoji} {link}\n"
+    async def get_pr_link_md(self, emoji: str, branch: str) -> str:
+        link = await PullRequest(branch).get_link_async()
+        return f"- {emoji} {link}\n"
+
+    @async_main
+    async def get_pr_links(self, marker: int) -> typing.List[str]:
+        return await asyncio.gather(*[
+            self.get_pr_link_md(
+                emoji='🐣' if i == marker else '🥚',
+                branch=item.branch
+            )
+            for i, item in enumerate(self.load())
+        ])
 
     def get_pr_body(self, marker: int) -> typing.Generator:
         yield "## Links\n"
