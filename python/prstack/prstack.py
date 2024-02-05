@@ -1,7 +1,10 @@
 import json
+import os
 import pathlib
 import shlex
+import shutil
 import subprocess
+import sys
 import typing
 import webbrowser
 
@@ -18,7 +21,7 @@ def get_pointer_value() -> str:
 
 
 def cmd(cmd: str) -> str:
-    print(f">>> {cmd}")
+    print(f">>> {cmd}", file=sys.stderr)
     return subprocess.check_output(shlex.split(cmd)).decode().strip()
 
 
@@ -75,6 +78,9 @@ class PullRequest:
                 body_prefix=body
             )
 
+    def submit(self):
+        print(cmd(f'gh pr ready {self.ref}'))
+
 
 class StackItem:
 
@@ -124,7 +130,7 @@ class Stack:
         stack_file.parent.mkdir(exist_ok=True)
 
         stack = [s.to_dict() for s in self.generate_stack_items()]
-        stack_file.write_text(json.dumps(stack))
+        stack_file.write_text(json.dumps(stack, indent=2))
         cmd(f"jsonnetfmt -i {stack_file.absolute()}")
 
     def get_path(self) -> pathlib.Path:
@@ -215,6 +221,16 @@ class Stack:
         branch = self.load(include_disabled=True)[num - 1].branch
         print(cmd(f"git checkout {branch}"))
 
+    def delete(self):
+        if input("Are you sure? [y/N] ") != "y":
+            print("exiting")
+            exit(1)
+        shutil.rmtree(self.get_path().parent)
+
+    def submit(self):
+        for item in self.load(include_disabled=False):
+            PullRequest(item.branch).submit()
+
 
 @app.command()
 def use(stack_name: str):
@@ -275,6 +291,28 @@ def disable(num: int, stack_name: typing.Annotated[str, typer.Argument(default_f
 def checkout(num: int, stack_name: typing.Annotated[str, typer.Argument(default_factory=get_pointer_value)]):
     stack = Stack(stack_name)
     stack.checkout(num)
+
+
+@app.command()
+def list():
+    for file in os.listdir(prstack_home.absolute()):
+        if file != prstack_pointer.name:
+            print(file)
+
+
+@app.command()
+def delete(stack_name: typing.Annotated[str, typer.Argument(default_factory=get_pointer_value)]):
+    stack = Stack(stack_name)
+    stack.delete()
+
+
+@app.command()
+def submit(stack_name: typing.Annotated[str, typer.Argument(default_factory=get_pointer_value)]):
+    if input("Are you sure you want to submit? [y/N] ") != "y":
+        print("exiting")
+        exit(1)
+    stack = Stack(stack_name)
+    stack.submit()
 
 
 if __name__ == "__main__":
