@@ -75,14 +75,15 @@ class PullRequest:
         print(await cmd_async(
             f'gh pr create --draft --head "{self.ref}" --title "{title}" --base "{base}" --body \'{body}\''))
 
-    async def edit(self, base: str, body_prefix: str) -> None:
+    async def edit(self, base: typing.Optional[str], body_prefix: str) -> None:
         current_body = json.loads(cmd(f'gh pr view "{self.ref}" --json body'))['body']
         new_body = body_prefix + current_body.split("## Description")[1]
 
         with tempfile.NamedTemporaryFile() as tmpfile:
             pathlib.Path(tmpfile.name).write_text(new_body)
             tmpfile.flush()
-            print(await cmd_async(f'gh pr edit "{self.ref}" --body-file \'{tmpfile.name}\' --base "{base}"'))
+            base_arg = "" if base is None else f'--base "{base}"'
+            print(await cmd_async(f'gh pr edit "{self.ref}" --body-file \'{tmpfile.name}\' {base_arg}'))
 
     def open(self) -> None:
         link = self.get_link()
@@ -97,8 +98,8 @@ class PullRequest:
         except subprocess.CalledProcessError:
             return "CLOSED"
 
-    async def ensure(self, title: str, base: str, body: str) -> None:
-        if await self.get_state() == "CLOSED":
+    async def ensure(self, title: str, base: str, body: str, disabled: bool) -> None:
+        if await self.get_state() == "CLOSED" and not disabled:
             await self.create(
                 title=title,
                 base=base,
@@ -106,7 +107,7 @@ class PullRequest:
             )
         else:
             await self.edit(
-                base=base,
+                base=None if disabled else base,
                 body_prefix=body
             )
 
@@ -179,7 +180,7 @@ class Stack:
         items = [item for item in items if item.enabled or include_disabled]
         for i, item in enumerate(items):
             item.prev = None if i == 0 else items[i - 1]
-            item.upstream = "master" if (item.prev is None or not item.enabled) else item.prev.branch
+            item.upstream = "master" if (item.prev is None or not item.prev.enabled) else item.prev.branch
         return items
 
     def store(self, items: typing.List[StackItem]) -> None:
@@ -232,20 +233,18 @@ class Stack:
             await PullRequest(branch).ensure(
                 title=item.title,
                 base=item.upstream,
-                body=body_prefix
+                body=body_prefix,
+                disabled=not item.enabled
             )
 
         await asyncio.gather(*[
-            ensure_pr(i, item) for i, item in enumerate(self.load())
+            ensure_pr(i, item) for i, item in enumerate(self.load(include_disabled=True))
         ])
 
     def get_pr_links(self, marker: int) -> typing.Generator:
-        num_disabled = 0
         for i, item in enumerate(self.load(include_disabled=True)):
-            if not item.enabled and i <= marker:
-                num_disabled += 1
             link = PullRequest(item.branch).get_link()
-            emoji = '🐢' if i == marker + num_disabled else '🥚'
+            emoji = '🐢' if i == marker else '🥚'
             yield f"- {emoji} {link}\n"
 
     def get_pr_body(self, marker: int) -> typing.Generator:
