@@ -240,9 +240,12 @@ class Stack:
         ])
 
     def get_pr_links(self, marker: int) -> typing.Generator:
-        for i, item in enumerate(self.load()):
+        num_disabled = 0
+        for i, item in enumerate(self.load(include_disabled=True)):
+            if not item.enabled and i <= marker:
+                num_disabled += 1
             link = PullRequest(item.branch).get_link()
-            emoji = '🐢' if i == marker else '🥚'
+            emoji = '🐢' if i == marker + num_disabled else '🥚'
             yield f"- {emoji} {link}\n"
 
     def get_pr_body(self, marker: int) -> typing.Generator:
