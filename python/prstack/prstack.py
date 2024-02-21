@@ -179,13 +179,26 @@ class Stack:
         items = [item for item in items if item.enabled or include_disabled]
         for i, item in enumerate(items):
             item.prev = None if i == 0 else items[i - 1]
-            item.upstream = "master" if i == 0 else item.prev.branch
+            item.upstream = "master" if (item.prev is None or not item.enabled) else item.prev.branch
         return items
 
     def store(self, items: typing.List[StackItem]) -> None:
         stack_file = self.get_path()
         stack_file.write_text(json.dumps([s.to_dict() for s in items]))
         cmd(f"jsonnetfmt -i {stack_file.absolute()}")
+
+    def extend(self, title: str) -> None:
+        items = self.load()
+        prev = items[-1]
+        num = len(items) + 1
+        items.append(StackItem(
+            subject=title,
+            branch=f"prstack-{self.name}-{len(items) + 1}",
+            title=f"{num}) {title}",
+            initial_sha=prev.initial_sha,
+            enabled=True
+        ))
+        self.store(items)
 
     def ensure_branches(self) -> None:
         for item in self.load():
@@ -337,6 +350,13 @@ def list():
         if file != prstack_pointer.name:
             print(file)
 
+
+@app.command(help="extends your stack by adding a new branch on the end")
+def extend(title: str, stack_name: typing.Annotated[str, typer.Argument(default_factory=get_pointer_value)]):
+    stack = Stack(stack_name)
+    stack.extend(title)
+    stack.ensure_branches()
+    stack.show()
 
 @app.command()
 def delete(stack_name: typing.Annotated[str, typer.Argument(default_factory=get_pointer_value)]):
