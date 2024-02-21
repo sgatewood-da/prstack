@@ -7,6 +7,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 import typing
 import webbrowser
 
@@ -54,28 +55,34 @@ def async_main(func):
     return wrapper
 
 
+@functools.cache
+def get_pr_link(ref: str) -> str:
+    try:
+        return json.loads(cmd(f'gh pr view "{ref}" --json url'))['url']
+    except subprocess.CalledProcessError:
+        return "(none)"
+
+
 class PullRequest:
 
     def __init__(self, ref: str) -> None:
         self.ref = ref
 
     def get_link(self) -> str:
-        try:
-            if self.ref in PR_LINK_CACHE:
-                return PR_LINK_CACHE[self.ref]
-            url = json.loads(cmd(f'gh pr view "{self.ref}" --json url'))['url']
-        except subprocess.CalledProcessError:
-            url = "(none)"
-        PR_LINK_CACHE[self.ref] = url
-        return url
+        return get_pr_link(self.ref)
 
     async def create(self, title: str, base: str, body: str) -> None:
-        print(await cmd_async(f'gh pr create --draft --head "{self.ref}" --title "{title}" --base "{base}" --body \'{body}\''))
+        print(await cmd_async(
+            f'gh pr create --draft --head "{self.ref}" --title "{title}" --base "{base}" --body \'{body}\''))
 
     async def edit(self, base: str, body_prefix: str) -> None:
         current_body = json.loads(cmd(f'gh pr view "{self.ref}" --json body'))['body']
         new_body = body_prefix + current_body.split("## Description")[1]
-        print(await cmd_async(f'gh pr edit "{self.ref}" --body \'{new_body}\' --base "{base}"'))
+
+        with tempfile.NamedTemporaryFile() as tmpfile:
+            pathlib.Path(tmpfile.name).write_text(new_body)
+            tmpfile.flush()
+            print(await cmd_async(f'gh pr edit "{self.ref}" --body-file \'{tmpfile.name}\' --base "{base}"'))
 
     def open(self) -> None:
         link = self.get_link()
