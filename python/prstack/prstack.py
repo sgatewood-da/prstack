@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import functools
 import json
 import os
@@ -100,6 +101,7 @@ class PullRequest:
 
     async def ensure(self, title: str, base: str, body: str, disabled: bool) -> None:
         if await self.get_state() == "CLOSED" and not disabled:
+            self.hack_skip_ci()
             await self.create(
                 title=title,
                 base=base,
@@ -110,6 +112,13 @@ class PullRequest:
                 base=None if disabled else base,
                 body_prefix=body
             )
+
+    def hack_skip_ci(self):
+        cmd(f'git checkout {self.ref}')
+        cmd('git rebase')
+        cmd(f'git commit --allow-empty -m "skip ci [skip ci]"')
+        cmd(f'git push -f origin {self.ref}')
+        cmd(f'git checkout -')
 
     def submit(self):
         print(cmd(f'gh pr ready {self.ref}'))
