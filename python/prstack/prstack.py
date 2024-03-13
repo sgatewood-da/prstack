@@ -4,6 +4,7 @@ import functools
 import json
 import os
 import pathlib
+import re
 import shlex
 import shutil
 import subprocess
@@ -62,6 +63,12 @@ def get_pr_link(ref: str) -> str:
         return json.loads(cmd(f'gh pr view "{ref}" --json url'))['url']
     except subprocess.CalledProcessError:
         return "(none)"
+
+
+@functools.cache
+def get_default_branch_name() -> str:
+    r = re.compile(r'origin/HEAD -> origin/([\w-]+)')
+    return r.search(cmd('git branch -r')).group(1)
 
 
 class PullRequest:
@@ -152,7 +159,8 @@ class Stack:
         self.name = name
 
     def generate_stack_items(self) -> typing.Generator[StackItem, None, None]:
-        for i, sha in enumerate(cmd("git log --reverse 'master..HEAD' --pretty=format:'%H'").splitlines()):
+        for i, sha in enumerate(
+                cmd(f"git log --reverse '{get_default_branch_name()}..HEAD' --pretty=format:'%H'").splitlines()):
             subject = cmd(f'git log --format="%s" -n 1 "{sha}"')
             yield StackItem(
                 subject=subject,
@@ -189,7 +197,7 @@ class Stack:
         items = [item for item in items if item.enabled or include_disabled]
         for i, item in enumerate(items):
             item.prev = None if i == 0 else items[i - 1]
-            item.upstream = "master" if (item.prev is None or not item.prev.enabled) else item.prev.branch
+            item.upstream = get_default_branch_name() if (item.prev is None or not item.prev.enabled) else item.prev.branch
         return items
 
     def store(self, items: typing.List[StackItem]) -> None:
@@ -368,6 +376,7 @@ def extend(title: str, stack_name: typing.Annotated[str, typer.Argument(default_
     stack.extend(title)
     stack.ensure_branches()
     stack.show()
+
 
 @app.command()
 def delete(stack_name: typing.Annotated[str, typer.Argument(default_factory=get_pointer_value)]):
