@@ -269,8 +269,11 @@ class Stack:
         yield from self.get_pr_links(marker)
         yield "\n## Description"
 
-    def rebase_all(self) -> None:
-        for item in self.load():
+    def rebase_all(self, start: int) -> None:
+        for i, item in enumerate(self.load()):
+            num = i + 1
+            if num < start:
+                continue
             print(cmd(f'git checkout "{item.branch}"'))
             print(cmd(f'git fetch origin "{item.upstream}"'))
             print(cmd(f'git rebase'))
@@ -338,9 +341,9 @@ def cmd_open(num: typing.Annotated[int, typer.Argument(default_factory=lambda: N
 
 
 @app.command()
-def rebase_all(stack_name: typing.Annotated[str, typer.Argument(default_factory=get_pointer_value)]):
+def rebase_all(stack_name: typing.Annotated[str, typer.Argument(default_factory=get_pointer_value)], start: typing.Annotated[int, typer.Argument(default_factory=lambda: 0)]):
     stack = Stack(stack_name)
-    stack.rebase_all()
+    stack.rebase_all(start)
 
 
 @app.command()
