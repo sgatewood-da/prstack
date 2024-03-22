@@ -160,7 +160,7 @@ class Stack:
 
     def generate_stack_items(self) -> typing.Generator[StackItem, None, None]:
         for i, sha in enumerate(
-                cmd(f"git log --reverse '{get_default_branch_name()}..HEAD' --pretty=format:'%H'").splitlines()):
+                cmd(f"git log --reverse 'origin/{get_default_branch_name()}..HEAD' --pretty=format:'%H'").splitlines()):
             subject = cmd(f'git log --format="%s" -n 1 "{sha}"')
             yield StackItem(
                 subject=subject,
