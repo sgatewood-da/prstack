@@ -341,7 +341,7 @@ def cmd_open(num: typing.Annotated[int, typer.Argument(default_factory=lambda: N
 
 
 @app.command()
-def rebase_all(stack_name: typing.Annotated[str, typer.Argument(default_factory=get_pointer_value)], start: typing.Annotated[int, typer.Argument(default_factory=lambda: 0)]):
+def rebase_all(start: typing.Annotated[int, typer.Argument(default_factory=lambda: 0)], stack_name: typing.Annotated[str, typer.Argument(default_factory=get_pointer_value)]):
     stack = Stack(stack_name)
     stack.rebase_all(start)
 
