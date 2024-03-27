@@ -71,6 +71,11 @@ def get_default_branch_name() -> str:
     return r.search(cmd('git branch -r')).group(1)
 
 
+@functools.cache
+def get_default_branch_ref() -> str:
+    return f'origin/{get_default_branch_name()}'
+
+
 class PullRequest:
 
     def __init__(self, ref: str) -> None:
@@ -158,9 +163,9 @@ class Stack:
     def __init__(self, name: str) -> None:
         self.name = name
 
-    def generate_stack_items(self) -> typing.Generator[StackItem, None, None]:
+    def generate_stack_items(self, base: str) -> typing.Generator[StackItem, None, None]:
         for i, sha in enumerate(
-                cmd(f"git log --reverse 'origin/{get_default_branch_name()}..HEAD' --pretty=format:'%H'").splitlines()):
+                cmd(f"git log --reverse '{base}..HEAD' --pretty=format:'%H'").splitlines()):
             subject = cmd(f'git log --format="%s" -n 1 "{sha}"')
             yield StackItem(
                 subject=subject,
@@ -170,7 +175,7 @@ class Stack:
                 enabled=True
             )
 
-    def generate_file(self) -> None:
+    def generate_file(self, base: str) -> None:
         stack_file = self.get_path()
         if stack_file.exists():
             if input("stack already exists. Replace it? [y/N] ") != "y":
@@ -179,7 +184,7 @@ class Stack:
 
         stack_file.parent.mkdir(exist_ok=True)
 
-        stack = [s.to_dict() for s in self.generate_stack_items()]
+        stack = [s.to_dict() for s in self.generate_stack_items(base)]
         stack_file.write_text(json.dumps(stack, indent=2))
         cmd(f"jsonnetfmt -i {stack_file.absolute()}")
 
@@ -311,9 +316,9 @@ def use(stack_name: str):
 
 
 @app.command()
-def generate(stack_name: str):
+def generate(stack_name: str, base: typing.Annotated[str, typer.Argument(default_factory=lambda: get_default_branch_ref)]):
     stack = Stack(stack_name)
-    stack.generate_file()
+    stack.generate_file(base)
     stack.show()
 
 
