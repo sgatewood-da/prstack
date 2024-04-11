@@ -316,7 +316,7 @@ def use(stack_name: str):
 
 
 @app.command()
-def generate(stack_name: str, base: typing.Annotated[str, typer.Argument(default_factory=lambda: get_default_branch_ref)]):
+def generate(stack_name: str, base: typing.Annotated[str, typer.Argument(default_factory=get_default_branch_ref)]):
     stack = Stack(stack_name)
     stack.generate_file(base)
     stack.show()
