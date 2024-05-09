@@ -86,7 +86,7 @@ class PullRequest:
 
     async def create(self, title: str, base: str, body: str) -> None:
         print(await cmd_async(
-            f'gh pr create --draft --head "{self.ref}" --title "{title}" --base "{base}" --body \'{body}\''))
+            f'gh pr create --draft --head "{self.ref}" --title \'{title}\' --base "{base}" --body \'{body}\''))
 
     async def edit(self, base: typing.Optional[str], body_prefix: str) -> None:
         current_body = json.loads(cmd(f'gh pr view "{self.ref}" --json body'))['body']
