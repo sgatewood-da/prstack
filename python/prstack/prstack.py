@@ -266,7 +266,7 @@ class Stack:
     def get_pr_links(self, marker: int) -> typing.Generator:
         for i, item in enumerate(self.load(include_disabled=True)):
             link = PullRequest(item.branch).get_link()
-            emoji = '🐢' if i == marker else '🥚'
+            emoji = '🌸 ' if i == marker else '🌼️'
             yield f"- {emoji} {link}\n"
 
     def get_pr_body(self, marker: int) -> typing.Generator:
